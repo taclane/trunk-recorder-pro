@@ -1220,10 +1220,8 @@ impl Config {
     }
 }
 
-/// Usable half-width of a source (the edges are filter roll-off).
-pub fn usable_half_width(rate_hz: f64) -> f64 {
-    rate_hz / 2.0 * 0.9
-}
+/// How far from its centre a source records (the edges are filter roll-off).
+pub use trunk_core::trunk::usable_half_width;
 
 /// A centre that puts every control channel inside one source (and off the
 /// DC spike), or None if they span too much.

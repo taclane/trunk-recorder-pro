@@ -427,7 +427,7 @@ pub struct CallRules {
 impl Conventional {
     /// `sources`: (centre, rate) of each source. Channels outside every
     /// source are an error.
-    pub fn new(channels: &[ConvChannel], sources: &[(f64, f64)], cfg: ConvConfig, bank_cfg: BankConfig, usable: f64) -> Result<Self, String> {
+    pub fn new(channels: &[ConvChannel], sources: &[(f64, f64)], cfg: ConvConfig, bank_cfg: BankConfig) -> Result<Self, String> {
         let mut chans = Vec::new();
         let mut outside = Vec::new();
         let mut groups: Vec<Vec<ConvChannel>> = Vec::new();
@@ -443,7 +443,7 @@ impl Conventional {
             c.squelch_db = rows.iter().filter_map(|r| r.squelch_db).reduce(f64::min);
             let c = &c;
             let routed = rows.len() > 1 || c.access.is_some();
-            let Some(src) = sources.iter().position(|&(center, rate)| (c.freq_hz - center).abs() <= rate / 2.0 * usable) else {
+            let Some(src) = sources.iter().position(|&(center, rate)| (c.freq_hz - center).abs() <= super::engine::usable_half_width(rate)) else {
                 outside.push(format!("{:.5}", c.freq_hz / 1e6));
                 continue;
             };

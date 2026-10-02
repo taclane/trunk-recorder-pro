@@ -90,9 +90,12 @@ export function formatFromPath(path: string): "cu8" | "cs16" | "cf32" {
   return ["cf32", "cfile", "fc32", "complex"].includes(ext) ? "cf32" : ["cs16", "sc16"].includes(ext) ? "cs16" : "cu8";
 }
 
-/** Usable half-width of a source (the edges are filter roll-off). */
+/** Kept clear at each edge of a source's band, Hz (as the recorder's engine: EDGE_MARGIN_HZ). */
+export const EDGE_MARGIN_HZ = 50_000;
+
+/** How far from its centre a source records: its half-band less the edge margin. */
 export function usableHalfWidth(rateHz: number): number {
-  return (rateHz / 2) * 0.9;
+  return Math.max(0, rateHz / 2 - EDGE_MARGIN_HZ);
 }
 
 /** A centre that fits every control channel in one source, off the DC spike. */

@@ -69,8 +69,16 @@ const ANALOG_SQUELCH_DB: f64 = 6.0;
 const CHANNEL_CUTOFF_HZ: f64 = 7000.0;
 /// Lowest per-channel rate the P25 receivers need.
 const MIN_CHANNEL_RATE: f64 = 24_000.0;
-/// Usable fraction of a source's bandwidth (the anti-alias roll-off eats the edges).
-const USABLE: f64 = 0.9;
+/// Kept clear at each edge of a source's band, Hz: the anti-alias roll-off.
+/// A fixed width, as Trunk Recorder uses at RTL-SDR rates (half its 100 kHz
+/// first IF): the roll-off doesn't grow with the sample rate, and a fraction
+/// of a wide source would waste hundreds of kHz.
+pub const EDGE_MARGIN_HZ: f64 = 50_000.0;
+
+/// How far from its centre a source records: its half-band less [`EDGE_MARGIN_HZ`].
+pub fn usable_half_width(rate_hz: f64) -> f64 {
+    (rate_hz / 2.0 - EDGE_MARGIN_HZ).max(0.0)
+}
 /// No good control message for this long → hunt to the next control channel.
 const CC_HUNT_S: f64 = 5.0;
 
@@ -463,7 +471,7 @@ struct Radio {
 
 impl Radio {
     fn source_for(&self, hz: f64) -> Option<usize> {
-        self.sources.iter().position(|s| (hz - s.cfg.center_hz).abs() <= s.cfg.rate_hz / 2.0 * USABLE)
+        self.sources.iter().position(|s| (hz - s.cfg.center_hz).abs() <= usable_half_width(s.cfg.rate_hz))
     }
 
     /// Run a channel's receivers over `iq`, collecting what its tracker
@@ -1077,7 +1085,7 @@ impl Engine {
         }
         let history = cfg.preroll_s.max(cfg.conv.preroll_s).max(0.1);
         let spans: Vec<(f64, f64)> = cfg.sources.iter().map(|s| (s.center_hz, s.rate_hz)).collect();
-        let conv = Conventional::new(&cfg.conventional, &spans, ConvConfig { vocoder: cfg.vocoder, ..cfg.conv }, cfg.bank, USABLE)?;
+        let conv = Conventional::new(&cfg.conventional, &spans, ConvConfig { vocoder: cfg.vocoder, ..cfg.conv }, cfg.bank)?;
         let sources: Vec<Source> =
             cfg.sources.iter().map(|s| Source { cfg: s.clone(), chz: Channelizer::new(s.rate_hz, MIN_CHANNEL_RATE, history), errors: VecDeque::new(), tune_ppm: 0.0 }).collect();
         let rate = sources[0].chz.output_rate();
@@ -1619,6 +1627,19 @@ impl Engine {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_source_records_to_50_khz_from_its_edges() {
+        // 2.4 MS/s: 1.15 MHz either side (it was 1.08 MHz, 90 % of the half-band).
+        assert_eq!(usable_half_width(2_400_000.0), 1_150_000.0);
+        // A channel 62.5 kHz inside the edge of a dongle at 770.46875 MHz.
+        assert!((771_606_250.0f64 - 770_468_750.0).abs() <= usable_half_width(2_400_000.0));
+        // The same 50 kHz however wide the source.
+        assert_eq!(usable_half_width(1_200_000.0), 550_000.0);
+        assert_eq!(usable_half_width(20_000_000.0), 9_950_000.0);
+        // Narrower than the margins: nothing.
+        assert_eq!(usable_half_width(80_000.0), 0.0);
+    }
 
     #[test]
     fn identity_conflict_and_confirmation() {
