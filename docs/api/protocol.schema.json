@@ -955,6 +955,15 @@
       "additionalProperties": false,
       "description": "An optional driver (desktop app) and what it found; `devices` null = not searched."
     },
+    "EncState": {
+      "type": "string",
+      "enum": [
+        "clear",
+        "mixed",
+        "encrypted"
+      ],
+      "description": "Whether calls were encrypted: none, some, or (nearly) all."
+    },
     "EngineStatus": {
       "type": "object",
       "properties": {
@@ -1000,6 +1009,13 @@
       "properties": {
         "freqHz": {
           "type": "number"
+        },
+        "site": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Radio database: the site it's a voice channel of."
         },
         "calls": {
           "type": "number"
@@ -2432,22 +2448,30 @@
               "type": "number"
             },
             "what": {
-              "type": "string",
-              "enum": [
-                "summary",
-                "talkgroups",
-                "units",
-                "tg",
-                "unit",
-                "freqs",
-                "lengths"
-              ]
+              "$ref": "#/definitions/RadioWhat"
             },
             "error": {
               "type": "string"
             },
             "system": {
               "type": "string"
+            },
+            "systemKey": {
+              "type": "string",
+              "description": "Radio database: the system's key and its sites; records it had no room for."
+            },
+            "sites": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "dropped": {
+              "type": "number"
+            },
+            "bucketHours": {
+              "type": "number",
+              "description": "Hours per value of `hourly` (spans past a week are bucketed)."
             },
             "systems": {
               "type": "object",
@@ -2475,6 +2499,12 @@
                   },
                   {
                     "$ref": "#/definitions/FreqRow"
+                  },
+                  {
+                    "$ref": "#/definitions/UnitEventRow"
+                  },
+                  {
+                    "$ref": "#/definitions/SystemRow"
                   }
                 ]
               }
@@ -2552,6 +2582,13 @@
                 "additionalProperties": false
               }
             },
+            "links": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/LinkRow"
+              },
+              "description": "tg (radio database): every radio linked to it, by kind."
+            },
             "lengths": {
               "$ref": "#/definitions/LengthHistogram"
             },
@@ -2571,6 +2608,12 @@
                   },
                   "secs": {
                     "type": "number"
+                  },
+                  "uu": {
+                    "type": "boolean"
+                  },
+                  "enc": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -2596,6 +2639,12 @@
                   },
                   "alphaTag": {
                     "type": "string"
+                  },
+                  "site": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   }
                 },
                 "required": [
@@ -2618,6 +2667,30 @@
                     "type": "string"
                   },
                   "n": {
+                    "type": "number"
+                  },
+                  "started": {
+                    "type": "number"
+                  },
+                  "talked": {
+                    "type": "number"
+                  },
+                  "joins": {
+                    "type": "number"
+                  },
+                  "locations": {
+                    "type": "number"
+                  },
+                  "enc": {
+                    "$ref": "#/definitions/EncState"
+                  },
+                  "encCalls": {
+                    "type": "number"
+                  },
+                  "first": {
+                    "type": "number"
+                  },
+                  "last": {
                     "type": "number"
                   }
                 },
@@ -2642,6 +2715,9 @@
                   },
                   "n": {
                     "type": "number"
+                  },
+                  "enc": {
+                    "$ref": "#/definitions/EncState"
                   }
                 },
                 "required": [
@@ -2651,6 +2727,43 @@
                 ],
                 "additionalProperties": false
               }
+            },
+            "events": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/UnitEventRow"
+              },
+              "description": "unit (radio database): its on / off, joins and locations, newest first; the aliases it's had."
+            },
+            "aliases": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "alias": {
+                    "type": "string"
+                  },
+                  "first": {
+                    "type": "number"
+                  },
+                  "last": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "alias",
+                  "first",
+                  "last"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "counts": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "number"
+              },
+              "description": "reasons (radio database): calls by what happened to them."
             },
             "histogram": {
               "$ref": "#/definitions/LengthHistogram",
@@ -2774,6 +2887,75 @@
         "counts"
       ],
       "additionalProperties": false
+    },
+    "LinkRow": {
+      "type": "object",
+      "properties": {
+        "unit": {
+          "type": "number"
+        },
+        "alias": {
+          "type": "string"
+        },
+        "started": {
+          "type": "number"
+        },
+        "talked": {
+          "type": "number"
+        },
+        "joins": {
+          "type": "number"
+        },
+        "locations": {
+          "type": "number"
+        },
+        "enc": {
+          "$ref": "#/definitions/EncState"
+        },
+        "encCalls": {
+          "type": "number"
+        },
+        "first": {
+          "type": "number"
+        },
+        "last": {
+          "type": "number"
+        },
+        "state": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "on",
+            "off",
+            null
+          ]
+        },
+        "unitLast": {
+          "type": "number"
+        },
+        "unitEnc": {
+          "$ref": "#/definitions/EncState"
+        }
+      },
+      "required": [
+        "unit",
+        "alias",
+        "started",
+        "talked",
+        "joins",
+        "locations",
+        "enc",
+        "encCalls",
+        "first",
+        "last",
+        "state",
+        "unitLast",
+        "unitEnc"
+      ],
+      "additionalProperties": false,
+      "description": "A link between a radio and a talkgroup, by kind (radio database)."
     },
     "LogLine": {
       "type": "object",
@@ -3963,6 +4145,16 @@
         "baseline": {
           "type": "boolean",
           "description": "Heard long enough that \"new\" means new."
+        },
+        "systemKey": {
+          "type": "string",
+          "description": "Radio database: the system this is (or is a site of), and its sites' short names."
+        },
+        "sites": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [
@@ -3978,6 +4170,22 @@
         "baseline"
       ],
       "additionalProperties": false
+    },
+    "RadioWhat": {
+      "type": "string",
+      "enum": [
+        "summary",
+        "talkgroups",
+        "units",
+        "tg",
+        "unit",
+        "freqs",
+        "lengths",
+        "events",
+        "reasons",
+        "systems"
+      ],
+      "description": "What a radioQuery asks. \"events\", \"reasons\" and \"systems\" need the radio database (the desktop app)."
     },
     "Recording": {
       "type": "object",
@@ -5598,6 +5806,79 @@
       ],
       "additionalProperties": false
     },
+    "SystemRow": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "wacn": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sysid": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "first": {
+          "type": "number"
+        },
+        "last": {
+          "type": "number"
+        },
+        "sites": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "shortName": {
+                "type": "string"
+              },
+              "rfss": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "site": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "first": {
+                "type": "number"
+              },
+              "last": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "shortName",
+              "rfss",
+              "site",
+              "first",
+              "last"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "key",
+        "wacn",
+        "sysid",
+        "first",
+        "last",
+        "sites"
+      ],
+      "additionalProperties": false,
+      "description": "A system as the radio database knows it: its key (WACN and System ID, or the config's site group) and the sites it was heard on."
+    },
     "SystemStatus": {
       "type": "object",
       "properties": {
@@ -5798,6 +6079,16 @@
         "encPct": {
           "type": "number"
         },
+        "encCalls": {
+          "type": "number",
+          "description": "Encrypted calls in the query's hours, and clear / mixed / encrypted then and all time (radio database)."
+        },
+        "enc": {
+          "$ref": "#/definitions/EncState"
+        },
+        "totalEnc": {
+          "$ref": "#/definitions/EncState"
+        },
         "new": {
           "type": "boolean",
           "description": "First heard in the last day (once the system has a baseline)."
@@ -5807,7 +6098,7 @@
           "items": {
             "type": "number"
           },
-          "description": "Calls per hour, oldest first."
+          "description": "Calls per hour (or per `bucketHours`), oldest first."
         }
       },
       "required": [
@@ -6254,16 +6545,7 @@
               "type": "number"
             },
             "what": {
-              "type": "string",
-              "enum": [
-                "summary",
-                "talkgroups",
-                "units",
-                "tg",
-                "unit",
-                "freqs",
-                "lengths"
-              ]
+              "$ref": "#/definitions/RadioWhat"
             },
             "system": {
               "type": "string"
@@ -6299,6 +6581,55 @@
           "additionalProperties": false
         }
       ]
+    },
+    "UnitEventRow": {
+      "type": "object",
+      "properties": {
+        "t": {
+          "type": "number"
+        },
+        "unit": {
+          "type": "number"
+        },
+        "alias": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "on",
+            "off",
+            "join",
+            "location",
+            "data",
+            "ack"
+          ]
+        },
+        "tg": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "alphaTag": {
+          "type": "string"
+        },
+        "site": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "t",
+        "kind",
+        "tg",
+        "alphaTag",
+        "site"
+      ],
+      "additionalProperties": false,
+      "description": "A radio's control channel event (radio database)."
     },
     "UnitNames": {
       "type": "object",
@@ -6377,9 +6708,9 @@
               "type": "number"
             },
             "minItems": 2,
-            "maxItems": 2
+            "maxItems": 3
           },
-          "description": "[talkgroup, transmissions], most first."
+          "description": "[talkgroup, transmissions (radio database: calls, joins and locations), encrypted calls], most first."
         },
         "partners": {
           "type": "array",
@@ -6395,6 +6726,52 @@
         },
         "new": {
           "type": "boolean"
+        },
+        "encTx": {
+          "type": "number",
+          "description": "Radio database: encrypted transmissions, calls it began, on / off (verified by registration) and since when, where last heard."
+        },
+        "started": {
+          "type": "number"
+        },
+        "enc": {
+          "$ref": "#/definitions/EncState"
+        },
+        "state": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "on",
+            "off",
+            null
+          ]
+        },
+        "stateT": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "lastSite": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "spanTx": {
+          "type": "number",
+          "description": "Radio database, in the query's hours: transmissions, airtime, encryption, control channel events."
+        },
+        "spanSecs": {
+          "type": "number"
+        },
+        "spanEnc": {
+          "$ref": "#/definitions/EncState"
+        },
+        "spanEvents": {
+          "type": "number"
         }
       },
       "required": [

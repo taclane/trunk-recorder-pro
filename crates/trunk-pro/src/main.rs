@@ -75,6 +75,7 @@ mod snrtool;
 mod plugins;
 mod profile;
 mod radio;
+mod radiodb;
 mod runtime;
 mod sdr;
 mod server;
@@ -678,6 +679,16 @@ fn serve(a: &Args) {
     // The dashboard's measurements: the radio registry (from earlier runs) and a week of history.
     let shared = trunk_app::stats::Shared::new();
     runtime::load_registry(&shared);
+    let radiodb = match radiodb::RadioDb::open(&paths::data_dir().join("radio.db")) {
+        Ok(db) => {
+            let _ = shared.sink.set(db.clone());
+            Some(db)
+        }
+        Err(e) => {
+            log::warn!("Radio database off: {e}");
+            None
+        }
+    };
     let series = Arc::new(Mutex::new(trunk_app::stats::History::default()));
     let store = statstore::Store::start(paths::data_dir().join("stats"), series.clone());
     let ctx = Arc::new(runtime::Ctx {
@@ -694,6 +705,7 @@ fn serve(a: &Args) {
         plugins: plugins::manage::Plugins::new(hub.clone(), shared.clone()),
         home_dir,
         shared,
+        radiodb,
         series,
         store,
         topics: Mutex::new(Default::default()),

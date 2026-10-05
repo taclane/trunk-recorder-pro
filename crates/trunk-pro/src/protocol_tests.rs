@@ -49,7 +49,7 @@ fn check(direction: &str, msg: &Value) -> Result<(), String> {
 }
 
 /// Check them all; fail listing every mismatch.
-fn check_all(direction: &str, msgs: &[Value]) {
+pub(crate) fn check_all(direction: &str, msgs: &[Value]) {
     let mut seen = BTreeSet::new();
     let problems: Vec<String> = msgs
         .iter()
@@ -258,6 +258,7 @@ fn ctx(cfg: Config, dir: &Path) -> Arc<crate::runtime::Ctx> {
         plugins: crate::plugins::manage::Plugins::new(hub.clone(), shared.clone()),
         home_dir: None,
         shared,
+        radiodb: None,
         series: series.clone(),
         store: crate::statstore::Store::start(dir.join("stats"), series),
         topics: Mutex::new(Default::default()),

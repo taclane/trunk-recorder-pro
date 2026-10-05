@@ -1022,11 +1022,18 @@ export interface TgRow {
   secs: number;
   totalCalls: number;
   encPct: number;
+  /** Encrypted calls in the query's hours, and clear / mixed / encrypted then and all time (radio database). */
+  encCalls?: number;
+  enc?: EncState;
+  totalEnc?: EncState;
   /** First heard in the last day (once the system has a baseline). */
   new: boolean;
-  /** Calls per hour, oldest first. */
+  /** Calls per hour (or per `bucketHours`), oldest first. */
   hourly: number[];
 }
+
+/** Whether calls were encrypted: none, some, or (nearly) all. */
+export type EncState = "clear" | "mixed" | "encrypted";
 
 /** A radio as heard (radioQuery units / unit). */
 export interface UnitRow {
@@ -1041,16 +1048,30 @@ export interface UnitRow {
   aff: number | null;
   affT: number | null;
   reg: boolean | null;
-  /** [talkgroup, transmissions], most first. */
-  tgs: [number, number][];
+  /** [talkgroup, transmissions (radio database: calls, joins and locations), encrypted calls], most first. */
+  tgs: [number, number, number?][];
   /** [radio, calls together], most first. */
   partners: [number, number][];
   new: boolean;
+  /** Radio database: encrypted transmissions, calls it began, on / off (verified by registration) and since when, where last heard. */
+  encTx?: number;
+  started?: number;
+  enc?: EncState;
+  state?: "on" | "off" | null;
+  stateT?: number | null;
+  lastSite?: string | null;
+  /** Radio database, in the query's hours: transmissions, airtime, encryption, control channel events. */
+  spanTx?: number;
+  spanSecs?: number;
+  spanEnc?: EncState;
+  spanEvents?: number;
 }
 
 /** A frequency's voice decoding (radioQuery freqs). */
 export interface FreqRow {
   freqHz: number;
+  /** Radio database: the site it's a voice channel of. */
+  site?: string | null;
   calls: number;
   frames: number;
   errors: number;
@@ -1086,22 +1107,72 @@ export interface RadioSummary {
   unknownTgs24h: number;
   /** Heard long enough that "new" means new. */
   baseline: boolean;
+  /** Radio database: the system this is (or is a site of), and its sites' short names. */
+  systemKey?: string;
+  sites?: string[];
 }
+
+/** A link between a radio and a talkgroup, by kind (radio database). */
+export interface LinkRow {
+  unit: number;
+  alias: string;
+  started: number;
+  talked: number;
+  joins: number;
+  locations: number;
+  enc: EncState;
+  encCalls: number;
+  first: number;
+  last: number;
+  state: "on" | "off" | null;
+  unitLast: number;
+  unitEnc: EncState;
+}
+
+/** A system as the radio database knows it: its key (WACN and System ID, or the config's site group) and the sites it was heard on. */
+export interface SystemRow {
+  key: string;
+  wacn: string | null;
+  sysid: string | null;
+  first: number;
+  last: number;
+  sites: { shortName: string; rfss: number | null; site: number | null; first: number; last: number }[];
+}
+
+/** A radio's control channel event (radio database). */
+export interface UnitEventRow {
+  t: number;
+  unit?: number;
+  alias?: string;
+  kind: "on" | "off" | "join" | "location" | "data" | "ack";
+  tg: number | null;
+  alphaTag: string;
+  site: string | null;
+}
+
+/** What a radioQuery asks. "events", "reasons" and "systems" need the radio database (the desktop app). */
+export type RadioWhat = "summary" | "talkgroups" | "units" | "tg" | "unit" | "freqs" | "lengths" | "events" | "reasons" | "systems";
 
 /** Answers radioQuery; which fields come depends on `what`. */
 export type RadioResult = { type: "radioResult" } & RadioResultBody;
 
 export interface RadioResultBody {
   id: number;
-  what: "summary" | "talkgroups" | "units" | "tg" | "unit" | "freqs" | "lengths";
+  what: RadioWhat;
   error?: string;
   system?: string;
+  /** Radio database: the system's key and its sites; records it had no room for. */
+  systemKey?: string;
+  sites?: string[];
+  dropped?: number;
+  /** Hours per value of `hourly` (spans past a week are bucketed). */
+  bucketHours?: number;
   /** summary */
   systems?: Record<string, RadioSummary>;
   /** talkgroups, units, freqs */
   hours?: number;
   total?: number;
-  rows?: (TgRow | UnitRow | FreqRow)[];
+  rows?: (TgRow | UnitRow | FreqRow | UnitEventRow | SystemRow)[];
   /** tg / unit: the one asked about (null: never heard). */
   tg?: number;
   unit?: number;
@@ -1110,12 +1181,19 @@ export interface RadioResultBody {
   week?: number[];
   talkers?: { unit: number; alias: string; n: number; lastTx: number }[];
   affiliated?: { unit: number; alias: string }[];
+  /** tg (radio database): every radio linked to it, by kind. */
+  links?: LinkRow[];
   lengths?: LengthHistogram;
   /** unit: its latest transmissions, affiliations, talkgroups, and the radios it's heard with. */
-  recent?: { t: number; tg: number; alphaTag: string; secs: number }[];
-  affiliations?: { t: number; tg: number; alphaTag: string }[];
-  tgs?: { tg: number; alphaTag: string; n: number }[];
-  partners?: { unit: number; alias: string; n: number }[];
+  recent?: { t: number; tg: number; alphaTag: string; secs: number; uu?: boolean; enc?: boolean }[];
+  affiliations?: { t: number; tg: number; alphaTag: string; site?: string | null }[];
+  tgs?: { tg: number; alphaTag: string; n: number; started?: number; talked?: number; joins?: number; locations?: number; enc?: EncState; encCalls?: number; first?: number; last?: number }[];
+  partners?: { unit: number; alias: string; n: number; enc?: EncState }[];
+  /** unit (radio database): its on / off, joins and locations, newest first; the aliases it's had. */
+  events?: UnitEventRow[];
+  aliases?: { alias: string; first: number; last: number }[];
+  /** reasons (radio database): calls by what happened to them. */
+  counts?: Record<string, number>;
   /** lengths */
   histogram?: LengthHistogram;
 }
@@ -1224,7 +1302,7 @@ export type ToRecorder =
   /** The history of series (names, or prefixes ending in `*`) over `range` back from now, or `from`–`to` (Unix s), in about `points` points. */
   | { type: "statsQuery"; id: number; series: string[]; range?: "10m" | "1h" | "6h" | "24h" | "7d"; from?: number; to?: number; points?: number }
   /** The radio registry: talkgroups, radios, frequencies heard. `key`: the talkgroup or radio for "tg" / "unit". */
-  | { type: "radioQuery"; id: number; what: "summary" | "talkgroups" | "units" | "tg" | "unit" | "freqs" | "lengths"; system?: string; key?: number; hours?: number; limit?: number }
+  | { type: "radioQuery"; id: number; what: RadioWhat; system?: string; key?: number; hours?: number; limit?: number }
   | { type: "quit" };
 
 /** Live audio: one 20 ms (or longer) chunk of a call, 8 kHz. */

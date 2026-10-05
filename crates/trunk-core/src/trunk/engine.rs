@@ -1571,6 +1571,11 @@ impl Engine {
         self.multisite.twins(id)
     }
 
+    /// Which system trunked system `system` is a site of, and which site, once known.
+    pub fn site_key(&self, system: u16) -> Option<SiteKey> {
+        self.trunks.get(system as usize).and_then(Trunk::site_key)
+    }
+
     /// A call ended: save it, or (multi-site) the best of its copies once the last one ends.
     fn conclude(&mut self, call: &Call) {
         let held = self.radio.recordings.remove(&call.id).map(|rec| {

@@ -852,6 +852,7 @@ fn event_system(ev: &Event) -> Option<u16> {
         Event::CallStart(c) | Event::CallEnd(c) | Event::NotSaved(c) => Some(c.system),
         Event::Concluded(k) => Some(k.call.system),
         Event::Duplicate { call, .. } => Some(call.system),
+        Event::UnitAlias { system, .. } => Some(*system),
         _ => None,
     }
 }

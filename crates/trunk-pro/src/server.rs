@@ -641,7 +641,10 @@ pub(crate) fn radio_query(ctx: &Ctx, v: &Value) -> Value {
     let tg = |sys: &str, t: u32| trunk_app::stats::tg_info(&tables, sys, t);
     let unit = |sys: &str, u: u32| aliases.get(sys).and_then(|a| a.get(u)).map(str::to_string);
     let names = trunk_app::stats::Names { tg: &tg, unit: &unit };
-    let mut out = ctx.shared.radio.lock().unwrap().query(v, unix_now(), &names);
+    let mut out = match &ctx.radiodb {
+        Some(db) => db.query(v, unix_now(), &names),
+        None => ctx.shared.radio.lock().unwrap().query(v, unix_now(), &names),
+    };
     out["type"] = json!("radioResult");
     out["id"] = v["id"].clone();
     out

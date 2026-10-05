@@ -20,6 +20,7 @@ pub mod history;
 pub mod meter;
 pub mod radio;
 pub mod ring;
+pub mod sink;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::{Arc, Mutex};
@@ -35,6 +36,7 @@ pub use events::{Monitor, MonitorEvent, Watcher};
 pub use history::History;
 pub use meter::SampleMeter;
 pub use radio::{Names, Registry, TgInfo};
+pub use sink::{Heard, RadioRecord, RadioSink, UnitEvent};
 
 /// The `stats` message and the rollups come this often, ms of wall clock.
 const TICK_MS: f64 = 1000.0;
@@ -47,6 +49,8 @@ const CLIP_EVENT_PCT: f64 = 0.5;
 pub struct Shared {
     pub radio: Mutex<Registry>,
     pub monitor: Mutex<Monitor>,
+    /// Keeps everything the registry hears (the desktop app's radio database).
+    pub sink: std::sync::OnceLock<Arc<dyn RadioSink>>,
 }
 
 impl Shared {
@@ -62,6 +66,19 @@ impl Shared {
     pub fn recent_events(&self) -> Vec<Value> {
         self.monitor.lock().unwrap().recent()
     }
+}
+
+/// A recorded call's file (Trunk Recorder's call JSON) as a [`RadioRecord::Voice`].
+fn voice_record(at: Heard, json: &str) -> Option<RadioRecord> {
+    let r: Value = serde_json::from_str(json).ok()?;
+    let freq_hz = r["freq"].as_u64()?;
+    let (mut frames, mut errors, mut bad) = (0, 0, 0);
+    for i in r["errorList"].as_array().into_iter().flatten() {
+        frames += i["frames"].as_u64().unwrap_or(0);
+        errors += i["error_count"].as_u64().unwrap_or(0);
+        bad += i["bad_frames"].as_u64().unwrap_or(0);
+    }
+    Some(RadioRecord::Voice { at, freq_hz, frames, errors, bad, snr: r["snr"].as_f64(), freq_error: r["freq_error"].as_f64(), clean: r["clean_voice_pct"].as_f64() })
 }
 
 /// What someone is watching (the union of every connected dashboard's
@@ -200,6 +217,19 @@ impl Stats {
     pub fn observe(&mut self, ev: &Event, name: &str, engine: &Engine, out: &mut Vec<Output>) {
         let t = self.now as i64;
         let sys = format!("sys/{}", key_part(name));
+        if let Some(sink) = self.shared.sink.get() {
+            let at = |system| Heard::new(engine, system, name, t);
+            let r = match ev {
+                Event::CallEnd(c) => Some(RadioRecord::call(at(c.system), c)),
+                Event::Message { system, msg } => RadioRecord::message(at(*system), msg),
+                Event::UnitAlias { system, unit, alias, talkgroup } => Some(RadioRecord::Alias { at: at(*system), unit: *unit, alias: alias.clone(), tg: *talkgroup }),
+                Event::Concluded(k) => voice_record(at(k.call.system), &k.json),
+                _ => None,
+            };
+            if let Some(r) = r {
+                sink.record(r);
+            }
+        }
         match ev {
             Event::CallStart(c) => {
                 let why = if c.recording { "recorded" } else { c.reason.map_or("monitored", |r| r.as_str()) };

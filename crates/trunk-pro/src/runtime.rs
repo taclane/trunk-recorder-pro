@@ -77,6 +77,8 @@ pub struct Ctx {
     pub home_dir: Option<PathBuf>,
     /// The radio registry and the event monitor: outlive recordings.
     pub shared: Arc<trunk_app::stats::Shared>,
+    /// Everything the registry hears, kept for good (None: it couldn't be opened).
+    pub radiodb: Option<Arc<crate::radiodb::RadioDb>>,
     /// The dashboard's minute history (a week), and where new minutes go.
     pub series: Arc<Mutex<trunk_app::stats::History>>,
     pub store: crate::statstore::Store,
