@@ -598,6 +598,13 @@
             "$ref": "#/definitions/System"
           }
         },
+        "systemNames": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Names for systems, by the key their sites' control channels give (\"p25:<wacn>.<sysid>\", \"smartnet:<sysid>\", \"group:<site group>\")."
+        },
         "conventional": {
           "type": "array",
           "items": {

@@ -290,6 +290,8 @@ export interface Conventional {
 export interface Config {
   sources: Source[];
   systems: System[];
+  /** Names for systems, by the key their sites' control channels give ("p25:<wacn>.<sysid>", "smartnet:<sysid>", "group:<site group>"). */
+  systemNames?: Record<string, string>;
   /** The conventional systems; the k-th's calls carry `system` conventionalSystem(k). */
   conventional: Conventional[];
   recording: Recording;

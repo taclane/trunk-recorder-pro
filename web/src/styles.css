@@ -738,6 +738,8 @@ input.ob-picker-path:hover, input.ob-picker-path:focus { border-color: var(--lin
   --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
   --series-5: #d55181; --series-6: #008300; --series-7: #9085e9; --series-8: #e66767;
   --good: var(--ok); --critical: var(--bad); --serious: #ec835a; --muted-mark: #5b6676;
+  /* Network graphs: encrypted, and off (deregistered) or not heard in a day. */
+  --net-enc: var(--bad); --net-stale: var(--muted-mark);
   --seq-0: #1d2532; --seq-1: #104281; --seq-2: #1c5cab; --seq-3: #2a78d6; --seq-4: #5598e7; --seq-5: #9ec5f4;
   --hot-0: #1d2532; --hot-1: #4a2a1a; --hot-2: #7a3418; --hot-3: #b8481f; --hot-4: #e8693a; --hot-5: #f59a72;
   --cell-empty: #1a212c;
@@ -822,6 +824,11 @@ h2.big { font-size: 26px; text-transform: none; letter-spacing: -0.01em; color: 
 .badge.new { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--accent); }
 .badge.unknown { background: color-mix(in srgb, var(--warn) 20%, transparent); color: var(--warn); }
 .badge.enc { background: color-mix(in srgb, var(--series-7) 25%, transparent); color: var(--text); }
+.badge.enc.mixed { background: transparent; border: 1px solid color-mix(in srgb, var(--series-7) 60%, transparent); }
+.badge.state-off { background: var(--panel-2); color: var(--muted); border: 1px solid var(--line); }
+.badge.state-on { background: color-mix(in srgb, var(--ok) 20%, transparent); color: var(--ok); }
+.net-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 6px; }
+.net-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
 .badge.ign { background: var(--panel-2); color: var(--muted); border: 1px solid var(--line); }
 .btn.on { border-color: var(--accent); color: var(--text); background: color-mix(in srgb, var(--accent) 14%, transparent); }
 

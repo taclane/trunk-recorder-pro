@@ -531,7 +531,7 @@ export interface Node {
  * Two columns of nodes and weighted links between them (radios ↔
  * talkgroups). Hover a node: its links stand out, the rest fade.
  */
-export function Bipartite(props: { left: Node[]; right: Node[]; edges: { a: string; b: string; w: number }[]; onClick?: (n: Node, side: "left" | "right") => void; leftTitle?: string; rightTitle?: string }) {
+export function Bipartite(props: { left: Node[]; right: Node[]; edges: { a: string; b: string; w: number; color?: string; title?: string }[]; onClick?: (n: Node, side: "left" | "right") => void; leftTitle?: string; rightTitle?: string }) {
   const [hot, setHot] = useState<string | null>(null);
   const rowH = 22;
   const H = Math.max(props.left.length, props.right.length) * rowH + 8;
@@ -570,16 +570,17 @@ export function Bipartite(props: { left: Node[]; right: Node[]; edges: { a: stri
               key={k}
               d={`M${xl},${y1} C${(xl + xr) / 2},${y1} ${(xl + xr) / 2},${y2} ${xr},${y2}`}
               fill="none"
-              stroke={`url(#${gid}g)`}
+              stroke={e.color ?? `url(#${gid}g)`}
               strokeWidth={1 + (e.w / maxW) * 6}
               opacity={on ? 0.55 : 0.06}
             >
-              <title>{`${props.left[a].label} ↔ ${props.right[b].label}: ${e.w}`}</title>
+              <title>{e.title ?? `${props.left[a].label} ↔ ${props.right[b].label}: ${e.w}`}</title>
             </path>
           );
         })}
         {props.left.map((n, i) => (
           <g key={n.id} className={`bip-node${linked(n.id) ? "" : " faded"}`} onMouseEnter={() => setHot(n.id)} onMouseLeave={() => setHot(null)} onClick={() => props.onClick?.(n, "left")}>
+            <title>{`${n.label}${n.sub ? ` — ${n.sub}` : ""}`}</title>
             <rect x={0} y={yl(i) - rowH / 2 + 2} width={xl - 8} height={rowH - 4} rx={4} className="bip-hit" />
             <text x={xl - 14} y={yl(i) + 4} textAnchor="end" className="bip-label">
               {n.label}
@@ -589,6 +590,7 @@ export function Bipartite(props: { left: Node[]; right: Node[]; edges: { a: stri
         ))}
         {props.right.map((n, i) => (
           <g key={n.id} className={`bip-node${linked(n.id) ? "" : " faded"}`} onMouseEnter={() => setHot(n.id)} onMouseLeave={() => setHot(null)} onClick={() => props.onClick?.(n, "right")}>
+            <title>{`${n.label}${n.sub ? ` — ${n.sub}` : ""}`}</title>
             <rect x={xr + 8} y={yr(i) - rowH / 2 + 2} width={W - xr - 8} height={rowH - 4} rx={4} className="bip-hit" />
             <circle cx={xr + 4} cy={yr(i)} r={4 + Math.min(4, Math.sqrt(n.weight) / 2)} fill={n.color ?? "var(--series-3)"} className="ring" />
             <text x={xr + 14} y={yr(i) + 4} className="bip-label">
@@ -626,8 +628,8 @@ export function RadialEgo(props: { center: { label: string; sub?: string }; inne
     return (
       <g key={`${ring}${p.n.id}`} className={`ego-node${hot && hot !== p.n.id ? " faded" : ""}`} onMouseEnter={() => setHot(p.n.id)} onMouseLeave={() => setHot(null)} onClick={() => props.onClick?.(p.n, ring)}>
         <title>{`${p.n.label}${p.n.sub ? ` — ${p.n.sub}` : ""}: ${p.n.weight}`}</title>
-        <line x1={c} y1={c} x2={p.x} y2={p.y} className="ego-link" strokeWidth={1 + (p.n.weight / max) * 4} opacity={hot === p.n.id ? 0.9 : 0.35} stroke={ring === "inner" ? "var(--series-1)" : "var(--series-3)"} />
-        <circle cx={p.x} cy={p.y} r={rad} fill={ring === "inner" ? "var(--series-1)" : "var(--series-3)"} className="ring" />
+        <line x1={c} y1={c} x2={p.x} y2={p.y} className="ego-link" strokeWidth={1 + (p.n.weight / max) * 4} opacity={hot === p.n.id ? 0.9 : 0.35} stroke={p.n.color ?? (ring === "inner" ? "var(--series-1)" : "var(--series-3)")} />
+        <circle cx={p.x} cy={p.y} r={rad} fill={p.n.color ?? (ring === "inner" ? "var(--series-1)" : "var(--series-3)")} className="ring" />
         <text x={p.x + (right ? rad + 4 : -rad - 4)} y={p.y + 4} textAnchor={right ? "start" : "end"} className="ego-label">
           {p.n.label}
         </text>

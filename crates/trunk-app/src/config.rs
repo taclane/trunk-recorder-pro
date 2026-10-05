@@ -998,6 +998,11 @@ pub struct Config {
     pub log: LogSettings,
     /// The dashboard's watch on the computer (desktop app).
     pub monitor: MonitorSettings,
+    /// Names for systems, by the key their sites' control channels give
+    /// ("p25:<wacn>.<sysid>", "smartnet:<sysid>", "group:<site group>"):
+    /// shown for the sites together.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub system_names: BTreeMap<String, String>,
     /// Keys this version doesn't know (a newer version's, a hand edit's):
     /// kept, and saved back as they were.
     #[serde(flatten)]
@@ -1075,6 +1080,7 @@ impl Default for Config {
             plugins: BTreeMap::new(),
             log: LogSettings::default(),
             monitor: MonitorSettings::default(),
+            system_names: BTreeMap::new(),
         }
     }
 }
