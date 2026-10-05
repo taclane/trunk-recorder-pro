@@ -1098,6 +1098,13 @@ impl Engine {
             sys: hex(sys_id, 3),
             talkgroup: tg,
         };
+        // The other sites of its system know the radio by it too.
+        if let Some(key) = self.site_key(system) {
+            let twins: Vec<u16> = self.trunks.iter().filter(|t| t.idx != system && t.site_key().is_some_and(|k| k.group == key.group)).map(|t| t.idx).collect();
+            for s in twins {
+                self.aliases.learn(s, a.unit, learned.clone());
+            }
+        }
         if self.aliases.learn(system, a.unit, learned) {
             self.events.push(Event::UnitAlias {
                 system,
