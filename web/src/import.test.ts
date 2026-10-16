@@ -44,7 +44,7 @@ test("replace: a first import takes the config's radios, systems and settings", 
   assert.deepEqual(names(r.config), ["county800"]);
   assert.equal(r.config.systems[0].talkgroupsName, "county.csv");
   assert.equal(r.config.recording.captureDir, "/tr/audio");
-  assert.equal(r.config.recording.callTimeoutS, 3);
+  assert.equal(r.config.recording.callTimeoutS, 4, "Trunk Recorder's callTimeout 3 ends calls some 4 s after the last update");
   assert.equal(r.config.log?.level, "debug");
   // The same on every system: the Recording tab's.
   assert.equal(r.config.recording.minCallS, 1);
@@ -78,7 +78,7 @@ test("merge: split configs imported one by one make one setup", () => {
   assert.equal(c.systems[1].talkgroupsName, "state.csv");
   // The first config's settings stay.
   assert.equal(c.recording.captureDir, "/tr/audio");
-  assert.equal(c.recording.callTimeoutS, 3);
+  assert.equal(c.recording.callTimeoutS, 4);
   assert.equal(c.log?.level, "debug");
 });
 

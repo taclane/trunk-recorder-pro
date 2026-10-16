@@ -108,7 +108,7 @@ value on every system becomes the global one on the **Recording** tab instead.
 | `digitalLevels` (default 1) | `digitalLevelDb`: 20·log10(value), so 2 → +6 dB |
 | `analogLevels` (default 8) | `analogLevelDb`: 20·log10(value / 8), so 16 → +6 dB |
 | `captureDir` (top level) | `recording.captureDir` |
-| `callTimeout` | `recording.callTimeoutS` |
+| `callTimeout` | `recording.callTimeoutS`: one more, so 3 → 4 s (Trunk Recorder counts whole seconds, checked once a second, so its N ends a call about N + 1 s after the last update; Pro's is exact) |
 | `recordUUVCalls` | `recording.recordUnitToUnit` |
 | `archiveFilesOnFailure` | `recording.archiveFilesOnFailure` |
 

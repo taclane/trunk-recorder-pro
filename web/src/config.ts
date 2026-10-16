@@ -1156,6 +1156,9 @@ export function importTrunkRecorderConfig(
     if (!owners.length && !merge) cfg.recording.filenameFormat = top;
     for (const o of owners) if (o.recording?.filenameFormat === undefined) o.recording = { ...o.recording, filenameFormat: top };
   }
+  // Trunk Recorder counts a call's quiet time in whole seconds, checked once a second:
+  // its callTimeout N ends a call about N + 1 s after the last update. Pro's is exact.
+  const callTimeoutS = typeof j.callTimeout === "number" ? j.callTimeout + 1 : undefined;
   if (merge) {
     // The Recording tab's settings stay; what this config sets the same is dropped, what it sets otherwise is its systems' own.
     const rec = cfg.recording as unknown as Record<string, unknown>;
@@ -1165,7 +1168,7 @@ export function importTrunkRecorderConfig(
     }
     const differs = [
       typeof j.captureDir === "string" && j.captureDir !== cfg.recording.captureDir && "captureDir",
-      typeof j.callTimeout === "number" && j.callTimeout !== cfg.recording.callTimeoutS && "callTimeout",
+      callTimeoutS !== undefined && callTimeoutS !== cfg.recording.callTimeoutS && "callTimeout",
       typeof j.recordUUVCalls === "boolean" && j.recordUUVCalls !== cfg.recording.recordUnitToUnit && "recordUUVCalls",
       typeof j.archiveFilesOnFailure === "boolean" && j.archiveFilesOnFailure !== cfg.recording.archiveFilesOnFailure && "archiveFilesOnFailure",
     ].filter((k): k is string => !!k);
@@ -1188,7 +1191,7 @@ export function importTrunkRecorderConfig(
   const added = { sources: addedSources, systems: mine.map((o) => (o as System | Conventional).shortName) };
   if (merge) return { config: cfg, notes, todo, plugins, added };
   if (typeof j.captureDir === "string") cfg.recording.captureDir = j.captureDir;
-  if (typeof j.callTimeout === "number") cfg.recording.callTimeoutS = j.callTimeout;
+  if (callTimeoutS !== undefined) cfg.recording.callTimeoutS = callTimeoutS;
   if (typeof j.recordUUVCalls === "boolean") cfg.recording.recordUnitToUnit = j.recordUUVCalls;
   if (typeof j.archiveFilesOnFailure === "boolean") cfg.recording.archiveFilesOnFailure = j.archiveFilesOnFailure;
   // The log: Trunk Recorder's keys at the top (its talkgroupDisplayFormat is a system's: the first one's).
