@@ -521,6 +521,16 @@ export interface SystemStatus {
   sites: SiteStatus[];
 }
 
+/** One conventional system recording. `index` is what its calls carry as `system`. */
+export interface ConvSystemStatus {
+  index: number;
+  shortName: string;
+  activeCalls: number;
+  /** Its frequencies with a signal on them now. */
+  channelsOpen: number;
+  callsConcluded: number;
+}
+
 /** A patch standing now: the supergroup, and the talkgroups patched into it. */
 export interface Patch {
   supergroup: TalkgroupName;
@@ -603,6 +613,8 @@ export interface EngineStatus {
   conventionalOpen: number;
   callsConcluded: number;
   systems: SystemStatus[];
+  /** The conventional systems recording (they have no sites to be in `systems`). */
+  conventional: ConvSystemStatus[];
   /** Every system's short name, by the number its calls and live audio carry as `system` (trunked systems first, then conventional). */
   systemNames: string[];
 }
@@ -1154,6 +1166,10 @@ export interface ChannelSnapshot {
   /** CQPSK's phase error, RMS degrees (under 10 clean, ~25 noise). */
   phaseErrDeg: number | null;
   calls: number;
+  /** A conventional channel: its mode. */
+  mode?: Channel["mode"];
+  /** A conventional channel: its rows' names, each once. */
+  names?: string[];
 }
 
 /** Something notable (crates/trunk-app/src/stats/events.rs). Which fields come depends on `kind`. */
