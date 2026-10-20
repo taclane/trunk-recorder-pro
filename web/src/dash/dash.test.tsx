@@ -4,9 +4,9 @@ import "../testEnv.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { renderToString } from "react-dom/server";
-import { defaultConfig, newSystem } from "../config.ts";
+import { defaultConfig, newConventional, newSystem } from "../config.ts";
 import { setView, snapshot, transport } from "../controller.ts";
-import type { CallView, Config, EngineStatus, FromRecorder, SiteIdentity, SiteStatus, SystemStatus } from "../protocol.ts";
+import type { CallView, Channel, Config, EngineStatus, FromRecorder, SiteIdentity, SiteStatus, SystemStatus } from "../protocol.ts";
 import { DecodePage } from "./Decode.tsx";
 import { Overview } from "./Overview.tsx";
 import { RadioPage } from "./Radio.tsx";
@@ -79,6 +79,28 @@ test("Decode: a system's page shows what its sites announce (decodeDetail), not 
   const page = text(renderToString(<DecodePage />));
   assert.ok(page.includes("SG 60001") && page.includes("Fire Dispatch (100) + 200"), page);
   assert.ok(page.includes("site 1-9"), page);
+});
+
+test("Decode: a conventional system's page has its calls, and each channel's mode and names", () => {
+  const c = defaultConfig();
+  const ch = (freqHz: number, mode: Channel["mode"], name: string) => ({ freqHz, mode, name, code: "", description: "", tag: "", group: "", enabled: true }) as Channel;
+  c.conventional.push(newConventional(c, { shortName: "town", channels: [ch(155_200_000, "p25", "Town PD"), ch(155_400_000, "fm", "Town PW")] }));
+  running(c, []);
+  transport.onMessage({
+    type: "status",
+    status: { systems: [], conventional: [{ index: 0, shortName: "town", activeCalls: 1, channelsOpen: 1, callsConcluded: 7 }], recording: 0 } as unknown as EngineStatus,
+    sources: [], load: 0, calls: [],
+  });
+  setView("decode");
+  assert.match(text(renderToString(<DecodePage />)), /Calls 7 this run .*1 on the air now/);
+  setView("decode", "town");
+  const snap = (freqHz: number, mode: Channel["mode"], names: string[]) => ({
+    system: "town", site: null, freqHz, source: 0, kind: "conventional" as const, powerDb: -60, noiseDb: -80, snrDb: 20, offsetHz: null, quality: null, phaseErrDeg: null, calls: 0, mode, names,
+  });
+  transport.onMessage({ type: "decodeDetail", system: "town", channels: [snap(155_200_000, "p25", ["Town PD"]), snap(155_400_000, "fm", ["Town PW"])], sites: [], patches: [] });
+  const page = text(renderToString(<DecodePage />));
+  assert.match(page, /7 calls saved this run · 1 active/);
+  assert.ok(page.includes("P25 · Town PD") && page.includes("FM · Town PW"), page);
 });
 
 test("Radio: a system's page has its calls on the air now, saying the site and the others carrying it, and its log; not another's", () => {
