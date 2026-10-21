@@ -49,6 +49,16 @@ export function channelWhat(c: ChannelSnapshot): string {
   return c.names?.length ? `${MODE_LABEL[c.mode]} · ${c.names.join(", ")}` : MODE_LABEL[c.mode];
 }
 
+/** What a conventional channel carried besides voice, and its talkers' home systems: "TSBK $27 ×3 · WACN BEE00 SysID 3A9 ×5". */
+export function alsoHeard(c: ChannelSnapshot): string {
+  const hex = (v: number, n: number) => v.toString(16).toUpperCase().padStart(n, "0");
+  const times = (n: number) => (n > 1 ? ` ×${n}` : "");
+  return [
+    ...(c.homeSystems ?? []).map((h) => `WACN ${hex(h.wacn, 5)} SysID ${hex(h.sysId, 3)}${times(h.count)}`),
+    ...(c.data ?? []).map((d) => `${d.what}${times(d.count)}`),
+  ].join(" · ");
+}
+
 /** A channel's demodulation quality: the eye opening, or CQPSK's phase error. */
 export function quality(c: { quality: number | null; phaseErrDeg: number | null }): string {
   return c.quality !== null ? num(c.quality, 1) : c.phaseErrDeg !== null ? `${num(c.phaseErrDeg, 1)}°` : "—";
@@ -314,6 +324,7 @@ function SystemDetail({ s, name, siteName }: { s: AppState; name: string; siteNa
                   <th>Offset</th>
                   <th title="Eye opening (10+ clean) or phase error (under 10° clean)">Quality</th>
                   <th>Calls</th>
+                  {x.kind === "conventional" && <th title="This run: its talkers' home systems, and what it carried besides voice (counted, not decoded)">Also heard</th>}
                 </tr>
               </thead>
               <tbody>
@@ -327,6 +338,7 @@ function SystemDetail({ s, name, siteName }: { s: AppState; name: string; siteNa
                     <td className="mono">{c.offsetHz !== null ? `${signed(c.offsetHz, 0)} Hz` : "—"}</td>
                     <td className="mono">{quality(c)}</td>
                     <td className="mono">{c.calls || ""}</td>
+                    {x.kind === "conventional" && <td className="small">{alsoHeard(c)}</td>}
                   </tr>
                 ))}
               </tbody>

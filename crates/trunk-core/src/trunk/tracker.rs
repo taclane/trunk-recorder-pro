@@ -9,12 +9,14 @@ use crate::mbe::{self, Kind, FRAME_SAMPLES};
 use crate::p25::alias::{is_alias_lcw, AliasLc, LcAliases};
 use crate::p25::crypt::{imbe_voice, next_mi, prev_mi, KeyCheck, Keyring, Keystream, Phase, SyncCheck, Verdict};
 use crate::p25::diversity::{best_es, best_frame, best_hdu, best_imbe, best_lc, Group};
-use crate::p25::frame::{HDU, LDU1, LDU2, TDU, TDULC};
+use crate::p25::frame::{HDU, LDU1, LDU2, PDU, TDU, TDULC, TSDU};
+use crate::p25::mbt;
+use crate::p25::tsbk::{decode_tsdu, tsbk_opcode, Trellis};
 use crate::p25::gps::LcPositions;
 use crate::p25::lc::{self, Lc, LinkControl};
 use crate::p25::voice::{decode_tdulc, imbe_bits_to_params, imbe_params_to_bits, ldu_codeword_end_bit, EncryptionSync, ALGID_CLEAR};
 use super::calls::Flags;
-use super::voice::{CipherId, Encryption, TrackerOut};
+use super::voice::{CipherId, DataSeen, Encryption, TrackerOut};
 use std::sync::Arc;
 
 /// An LDU's length, s (1728 symbols at 4800 baud).
@@ -229,6 +231,27 @@ impl VoiceTracker {
                 self.set_es(None);
                 self.last_ldu = None;
             }
+            // Data between (or instead of) calls: counted, not followed (a
+            // call's state is left as it is).
+            TSDU => {
+                let tsbks = g.iter().map(|f| decode_tsdu(f, Trellis::Viterbi).good).max_by_key(Vec::len).unwrap_or_default();
+                if tsbks.is_empty() {
+                    out.push(TrackerOut::Data(DataSeen::Undecoded(TSDU)));
+                }
+                for t in tsbks {
+                    out.push(TrackerOut::Data(DataSeen::Tsbk { mfid: t[1], opcode: tsbk_opcode(&t) }));
+                }
+            }
+            PDU => {
+                let header = g.iter().find_map(|f| {
+                    let bits = f.bits.get(112..308)?;
+                    mbt::decode_header(bits, f.soft.get(112..308))
+                });
+                out.push(TrackerOut::Data(match header {
+                    Some(h) => DataSeen::Pdu { format: h[0] & 0x1f, sap: h[1] & 0x3f, mfid: h[2] },
+                    None => DataSeen::Undecoded(PDU),
+                }));
+            }
             _ => {}
         }
     }
@@ -254,7 +277,8 @@ impl VoiceTracker {
         match lc.msg {
             Lc::GroupVoiceUser { .. } | Lc::PatchVoiceUser { .. } | Lc::UnitVoiceUser { .. } | Lc::PhoneVoiceUser { .. } => self.voice_user(&lc, clear, t, out),
             // The full ID of a talker the voice user word couldn't address.
-            Lc::SourceIdExtension { id, .. } => {
+            Lc::SourceIdExtension { id, wacn, sys_id } => {
+                out.push(TrackerOut::SourceSystem { wacn, sys_id });
                 if let (None, Some(id)) = (self.talker, radio(id)) {
                     self.talker = Some(id);
                     out.push(TrackerOut::Info { source: Some(id), flags: Flags { encrypted: self.voice.encrypted(), ..Default::default() } });

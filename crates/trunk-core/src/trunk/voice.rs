@@ -115,6 +115,36 @@ pub enum TrackerOut {
     /// The FCC call sign the voice channel identifies itself by (Motorola's
     /// LC_MOT_BSI / MAC_MOT_BSI).
     BaseStationId(String),
+    /// A frame on the channel that isn't voice, and what its header says.
+    Data(DataSeen),
+    /// The system a talker's full ID names (a Source ID Extension, LCO 9):
+    /// its home WACN and System ID.
+    SourceSystem { wacn: u32, sys_id: u16 },
+}
+
+/// A P25 frame heard on a voice channel that isn't voice: what its header
+/// says, for counting what a channel carries besides its calls.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DataSeen {
+    /// A TSBK (conventional supplementary services: emergency alarm, call
+    /// alert, status and message updates, radio check …): its manufacturer and opcode.
+    Tsbk { mfid: u8, opcode: u8 },
+    /// A packet data unit's header: its format, service access point and manufacturer.
+    Pdu { format: u8, sap: u8, mfid: u8 },
+    /// A TSDU or PDU (its DUID) whose blocks didn't decode.
+    Undecoded(u8),
+}
+
+impl DataSeen {
+    /// As the log and the dashboard name it: "TSBK $27", "TSBK $00 MFID $90", "PDU SAP $20 format $16".
+    pub fn label(&self) -> String {
+        let mfid = |m: u8| if m <= 1 { String::new() } else { format!(" MFID ${m:02X}") };
+        match *self {
+            DataSeen::Tsbk { mfid: m, opcode } => format!("TSBK ${opcode:02X}{}", mfid(m)),
+            DataSeen::Pdu { format, sap, mfid: m } => format!("PDU SAP ${sap:02X} format ${format:02X}{}", mfid(m)),
+            DataSeen::Undecoded(duid) => format!("{} (undecoded)", crate::p25::frame::duid_name(duid)),
+        }
+    }
 }
 
 /// What a P25 transmission's voice is, as far as is known.

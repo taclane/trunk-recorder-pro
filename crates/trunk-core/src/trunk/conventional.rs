@@ -55,10 +55,10 @@ use std::sync::Arc;
 use num_complex::Complex32;
 
 use super::calls::{Call, CallIds, CallManager, Flags, Voice, STUCK_CALL_S};
-use super::engine::{Event, SystemConfig};
+use super::engine::{Event, NoteLevel, SystemConfig};
 use super::frames::CallFrames;
 use super::record::{Reception, Transmissions};
-use super::voice::CipherId;
+use super::voice::{CipherId, DataSeen};
 use super::talkgroups::{Talkgroup, Talkgroups};
 use super::voice::TrackerOut;
 use super::voice::{self, VoiceDecoder, VoiceKind, VoiceSpec};
@@ -558,6 +558,10 @@ pub struct ConvNow<'a> {
     /// well its decoder hears it (digital modes).
     pub offset_hz: Option<f32>,
     pub quality: voice::ChannelQuality,
+    /// What it carried besides voice this run, and how often.
+    pub data: &'a [(DataSeen, u64)],
+    /// The home systems (WACN, System ID) its talkers named, and how often.
+    pub home_systems: &'a [((u32, u16), u64)],
 }
 
 /// One frequency, and the rows on it (what they share is checked: [`Conventional::check`]).
@@ -585,6 +589,10 @@ struct Chan {
     tune_ppm: f64,
     /// Its calls score the source's AutoTune: a digital row asks it.
     tune_ref: bool,
+    /// What it carried besides voice this run, and how often ([`DataSeen`]).
+    data: Vec<(DataSeen, u64)>,
+    /// The home systems (WACN, System ID) its talkers' full IDs named, and how often.
+    home_systems: Vec<((u32, u16), u64)>,
     offset_hz: f64,
     slice: usize,
     power: f64,
@@ -665,6 +673,20 @@ impl<'a> CallRules<'a> {
     }
 }
 
+/// Count `k` in `seen`; true the first time it is seen.
+fn count<K: PartialEq>(seen: &mut Vec<(K, u64)>, k: K) -> bool {
+    match seen.iter_mut().find(|(x, _)| *x == k) {
+        Some((_, n)) => {
+            *n += 1;
+            false
+        }
+        None => {
+            seen.push((k, 1));
+            true
+        }
+    }
+}
+
 impl Conventional {
     /// `sources`: (centre, rate, usable half-width) of each source. Channels
     /// outside every source are an error.
@@ -694,7 +716,7 @@ impl Conventional {
             let bar = squelch_db.unwrap_or(cfg.squelch_db);
             let (freq_hz, mode, system, analog, shape) = (c.freq_hz, c.mode, c.system, c.analog, ChannelShape::of(c.mode, &c.analog));
             let tune_ref = !mode.analog() && rows.iter().any(|r| r.tune_ref);
-            chans.push(Chan { freq_hz, mode, system, analog, shape, squelch_db, rows, routed, skipped: [None, None], source: src, center_hz: center, tune_ppm: 0.0, tune_ref, offset_hz, slice, power: 0.0, watch: (mode == ConvMode::Am).then(am::LineWatch::default), ignored: Vec::new(), bar_db: bar, raised: false, open: None });
+            chans.push(Chan { freq_hz, mode, system, analog, shape, squelch_db, rows, routed, skipped: [None, None], source: src, center_hz: center, tune_ppm: 0.0, tune_ref, data: Vec::new(), home_systems: Vec::new(), offset_hz, slice, power: 0.0, watch: (mode == ConvMode::Am).then(am::LineWatch::default), ignored: Vec::new(), bar_db: bar, raised: false, open: None });
         }
         if !outside.is_empty() {
             return Err(format!("Conventional channel(s) outside every source's bandwidth: {} MHz — move a center frequency or disable them.", outside.join(", ")));
@@ -797,6 +819,8 @@ impl Conventional {
                 calls: open.map_or(0, |o| o.live.iter().flatten().count()),
                 offset_hz: open.and_then(|o| o.voice.offset_hz()),
                 quality: open.map(|o| o.voice.quality()).unwrap_or_default(),
+                data: &c.data,
+                home_systems: &c.home_systems,
             }
         })
     }
@@ -979,6 +1003,18 @@ impl Conventional {
                 TrackerOut::WrongKey(c) => out.push(ConvOut::WrongKey(ch.system as u16, c)),
                 TrackerOut::AliasLc(_) => {}
                 TrackerOut::BaseStationId(call_sign) => out.push(ConvOut::Event(Event::CallSign { system: ch.system as u16, freq_hz: ch.freq_hz.round() as u64, call_sign })),
+                TrackerOut::Data(d) => {
+                    if count(&mut ch.data, d) {
+                        let text = format!("{:.4} MHz: {} heard on the channel (counted, not decoded)", ch.freq_hz / 1e6, d.label());
+                        out.push(ConvOut::Event(Event::Note { system: ch.system as u16, site: None, level: NoteLevel::Info, text }));
+                    }
+                }
+                TrackerOut::SourceSystem { wacn, sys_id } => {
+                    if count(&mut ch.home_systems, (wacn, sys_id)) {
+                        let text = format!("{:.4} MHz: a talker of WACN {wacn:05X}, System ID {sys_id:03X}", ch.freq_hz / 1e6);
+                        out.push(ConvOut::Event(Event::Note { system: ch.system as u16, site: None, level: NoteLevel::Info, text }));
+                    }
+                }
             }
         }
         for (slot, h) in heard.iter_mut().enumerate() {
@@ -1257,6 +1293,15 @@ impl Conventional {
 
     fn end(l: Live, num: u32, tune_source: Option<usize>, out: &mut Vec<ConvOut>) {
         let freq_error_hz = (l.freq_error.1 > 0).then(|| l.freq_error.0 / l.freq_error.1 as f64);
+        // Why it's encrypted: a sync's ALGID, or only link control's protected bit.
+        if l.call.encrypted && !l.call.decrypted {
+            let why = match l.call.cipher {
+                Some(c) => format!("its encryption sync names ALGID ${:02X}, key ${:04X}", c.algid, c.keyid),
+                None => "only its link control's protected bit said so: no encryption sync named an algorithm (it may be clear)".to_string(),
+            };
+            let text = format!("{:.4} MHz: TG {} marked encrypted — {why}", l.call.freq_hz as f64 / 1e6, l.call.talkgroup);
+            out.push(ConvOut::Event(Event::Note { system: l.call.system, site: None, level: NoteLevel::Info, text }));
+        }
         out.push(ConvOut::End { call: l.call, audio: l.audio, frames: l.frames, recorder_num: num, tx: l.tx, reception: l.reception, freq_error_hz, tune_source });
     }
 
@@ -1819,6 +1864,58 @@ mod tests {
         assert!((ppm - 4.51).abs() < 0.8 && tuned.applied_ppm == ppm, "{tuned:?}");
         let (left, _) = run(false);
         assert_eq!((left.error_ppm, left.applied_ppm), (None, 0.0));
+    }
+
+    /// A P25 channel carrying data besides voice: its TSBKs and a packet's
+    /// header are counted by what they are, and a talker's home system
+    /// (Source ID Extension) is kept — each noted the first time.
+    #[test]
+    fn data_and_home_systems_on_a_p25_channel_are_counted() {
+        use crate::p25::synth::{dibits, group_voice_lc, hdu, imbe, ldu1, ldu2, modulate, pdu, tsdu};
+        use crate::p25::voice::EncryptionSync;
+        let (fs, center, freq, nac) = (480_000.0, 155_000_000.0, 155_050_000.0, 0x293);
+        let clear = EncryptionSync { algid: 0x80, keyid: 0, mi: [0; 9] };
+        let voice: [[u8; 88]; 9] = std::array::from_fn(imbe);
+        let lc = group_voice_lc(0, 1, 1673016);
+        let home = [0x49, 0, 0xbe, 0xe0, 0x03, 0xa9, 0x19, 0x87, 0x38];
+        let mut tsbk_a = [0u8; 12];
+        tsbk_a[0] = 0x27;
+        let mut tsbk_b = [0u8; 12];
+        (tsbk_b[0], tsbk_b[1]) = (0x05, 0x90);
+        let mut header = [0u8; 12];
+        (header[0], header[1]) = (0x16, 0xe0);
+        let mut frames = vec![hdu(nac, &clear, 1)];
+        for _ in 0..3 {
+            frames.extend([ldu1(nac, &lc, &voice), ldu2(nac, &clear, &voice), ldu1(nac, &home, &voice), ldu2(nac, &clear, &voice)]);
+        }
+        frames.extend([tsdu(nac, &[tsbk_a, tsbk_b]), pdu(nac, header, &[[0u8; 12]]), tsdu(nac, &[tsbk_a])]);
+        frames.extend((0..2).flat_map(|_| [ldu1(nac, &lc, &voice), ldu2(nac, &clear, &voice)]));
+        let mut iq = vec![Complex32::default(); (fs * 6.0) as usize];
+        let mut ph = 0.0;
+        for (k, v) in modulate(&dibits(&frames), fs, freq - center, 0.3, &mut ph).into_iter().enumerate() {
+            if let Some(s) = iq.get_mut((0.3 * fs) as usize + k) {
+                *s += v;
+            }
+        }
+        crate::nxdn::synth::add_noise(&mut iq, 0.003, &mut 9);
+        let cfg = EngineConfig {
+            sources: vec![SourceConfig { center_hz: center, rate_hz: fs, auto_tune: false, guard_hz: crate::trunk::DEFAULT_GUARD_HZ }],
+            conventional: vec![ConvChannel { talkgroup: Some(1), ..ConvChannel::new(freq, ConvMode::P25) }],
+            systems: vec![conv_system("conv")],
+            ..Default::default()
+        };
+        let e = Engine::new(cfg).unwrap();
+        for c in iq.chunks(32_768) {
+            e.push_iq(0, c);
+        }
+        e.finish();
+        let notes: Vec<String> = e.drain_events().into_iter().filter_map(|ev| if let Event::Note { text, .. } = ev { Some(text) } else { None }).collect();
+        let ch = e.channels().into_iter().find(|c| c.mode.is_some()).unwrap();
+        assert_eq!(ch.data, [("TSBK $27".to_string(), 2), ("TSBK $05 MFID $90".to_string(), 1), ("PDU SAP $20 format $16".to_string(), 1)], "{notes:?}");
+        assert_eq!(ch.home_systems, [(0xbee00, 0x3a9, 3)]);
+        for want in ["155.0500 MHz: TSBK $27 heard on the channel", "155.0500 MHz: PDU SAP $20 format $16 heard", "155.0500 MHz: a talker of WACN BEE00, System ID 3A9"] {
+            assert!(notes.iter().any(|n| n.contains(want)), "{want}: {notes:?}");
+        }
     }
 
     fn p25_calls(txs: &[(f64, u16, u16)], rows: Vec<ConvChannel>, secs: f64) -> (Vec<(Call, String)>, Vec<String>) {

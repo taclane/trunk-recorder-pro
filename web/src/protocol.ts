@@ -1231,6 +1231,10 @@ export interface ChannelSnapshot {
   mode?: Channel["mode"];
   /** A conventional channel: its rows' names, each once. */
   names?: string[];
+  /** A conventional channel: what it carried besides voice this run ("TSBK $27", "TSBK $00 MFID $90", "PDU SAP $20 format $16", "TSDU (undecoded)"), and how often. */
+  data?: { what: string; count: number }[];
+  /** A conventional channel: the home systems its talkers' full IDs named (a Source ID Extension), and how often. */
+  homeSystems?: { wacn: number; sysId: number; count: number }[];
 }
 
 /** Something notable (crates/trunk-app/src/stats/events.rs). Which fields come depends on `kind`. */

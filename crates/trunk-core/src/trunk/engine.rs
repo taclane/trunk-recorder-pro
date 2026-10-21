@@ -402,6 +402,11 @@ pub struct ChannelSnapshot {
     /// A conventional channel: its mode, and its rows' names.
     pub mode: Option<ConvMode>,
     pub names: Vec<String>,
+    /// A conventional channel: what it carried besides voice this run (as
+    /// [`super::voice::DataSeen::label`] names it), and how often.
+    pub data: Vec<(String, u64)>,
+    /// A conventional channel: its talkers' home systems (WACN, System ID), and how often.
+    pub home_systems: Vec<(u32, u16, u64)>,
 }
 
 /// What a channel is to the engine ([`ChannelSnapshot`]).
@@ -441,6 +446,8 @@ struct Want {
     calls: usize,
     mode: Option<ConvMode>,
     names: Vec<String>,
+    data: Vec<(String, u64)>,
+    home_systems: Vec<(u32, u16, u64)>,
 }
 
 /// Noise profile slices per source for the dashboard.
@@ -1663,6 +1670,8 @@ impl Core {
                     calls: c.calls,
                     mode: Some(c.mode),
                     names: c.names.iter().map(|n| n.to_string()).collect(),
+                    data: c.data.iter().map(|(d, n)| (d.label(), *n)).collect(),
+                    home_systems: c.home_systems.iter().map(|&((w, s), n)| (w, s, n)).collect(),
                 })
             })
             .collect();
@@ -1947,6 +1956,8 @@ impl Core {
                 }
                 // (Only conventional FM asks for it.)
                 TrackerOut::Subaudible(_) => {}
+                // (Counted on conventional channels; a trunked site says these on its control channel.)
+                TrackerOut::Data(_) | TrackerOut::SourceSystem { .. } => {}
                 TrackerOut::Position(p) => {
                     if let Some(c) = call {
                         if CallManager::note_position(c, &p) {
@@ -2221,6 +2232,8 @@ impl Engine {
                 calls: w.calls,
                 mode: w.mode,
                 names: w.names.clone(),
+                data: w.data.clone(),
+                home_systems: w.home_systems.clone(),
             }
         };
         let (mut control_out, mut conv_out): (Vec<Option<ChannelSnapshot>>, Vec<Option<ChannelSnapshot>>) = (control.iter().map(|_| None).collect(), conv.iter().map(|_| None).collect());

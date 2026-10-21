@@ -372,6 +372,15 @@ In the log, a conventional call looks like a trunked one: a `Starting ... Record
 starts, and `Concluding Recorded Call - Call Length: ...` with its signal, noise and SNR when it is
 saved. There is no separate log line for each detection.
 
+A digital channel can carry more than voice. On a P25 channel, the **Decode** page's **Channels
+now** table has an **Also heard** column, for this run: the home systems its talkers' full IDs
+named (`WACN BEE00 SysID 3A9`, from a Source ID Extension), and what it carried besides voice,
+counted but not yet decoded. That's TSBKs by opcode and manufacturer (`TSBK $27`,
+`TSBK $05 MFID $90`; conventional P25 sends emergency alarms, call alerts, status and message
+updates this way) and packet data by its header's SAP and format (`PDU SAP $20 format $16`). Each
+is logged the first time it's heard on a frequency. A call marked encrypted logs why when it ends:
+the ALGID and key its encryption sync named, or that only its link control's protected bit said so.
+
 ### Messages that stop recording from starting
 
 | Message | Meaning |

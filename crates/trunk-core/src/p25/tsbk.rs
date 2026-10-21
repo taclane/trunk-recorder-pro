@@ -40,6 +40,22 @@ static TB: [u8; 196] = {
 };
 static NEXT: [[u8; 4]; 4] = [[0x2, 0xc, 0x1, 0xf], [0xe, 0x0, 0xd, 0x3], [0x9, 0x7, 0xa, 0x4], [0x5, 0xb, 0x6, 0x8]];
 
+/// A block's 196 bits: `t` through the 1/2-rate trellis (48 dibits and the
+/// flush to state 0), interleaved — what [`trellis_greedy`] undoes.
+pub fn trellis_encode(t: &Tsbk) -> [u8; 196] {
+    let mut bits = [0u8; 196];
+    let mut state = 0usize;
+    for d in 0..49 {
+        let dibit = if d < 48 { (t[d >> 2] >> (6 - (d % 4) * 2) & 3) as usize } else { 0 };
+        let cw = NEXT[state][dibit];
+        for k in 0..4 {
+            bits[TB[4 * d + k] as usize] = cw >> (3 - k) & 1;
+        }
+        state = dibit;
+    }
+    bits
+}
+
 /// op25's greedy decoder: `None` on a tie.
 pub fn trellis_greedy(bits: &[u8]) -> Option<Tsbk> {
     let mut out = [0u8; 12];
@@ -180,3 +196,20 @@ pub fn decode_tsdu(f: &Frame, mode: Trellis) -> TsduResult {
     r
 }
 
+
+#[cfg(test)]
+mod encode_tests {
+    use super::*;
+
+    /// What the trellis encoder writes, both decoders read back.
+    #[test]
+    fn trellis_encode_round_trips() {
+        let mut t: Tsbk = [0x27, 0x90, 1, 2, 3, 4, 5, 6, 7, 8, 0, 0];
+        let crc = crc_ccitt_bytes(&t[..10]).to_be_bytes();
+        t[10..12].copy_from_slice(&crc);
+        let bits = trellis_encode(&t);
+        assert_eq!(trellis_greedy(&bits), Some(t));
+        assert_eq!(trellis_viterbi(&bits, None), t);
+        assert!(tsbk_ok(&t));
+    }
+}

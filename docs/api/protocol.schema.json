@@ -752,6 +752,50 @@
             "type": "string"
           },
           "description": "A conventional channel: its rows' names, each once."
+        },
+        "data": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "what": {
+                "type": "string"
+              },
+              "count": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "what",
+              "count"
+            ],
+            "additionalProperties": false
+          },
+          "description": "A conventional channel: what it carried besides voice this run (\"TSBK $27\", \"TSBK $00 MFID $90\", \"PDU SAP $20 format $16\", \"TSDU (undecoded)\"), and how often."
+        },
+        "homeSystems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "wacn": {
+                "type": "number"
+              },
+              "sysId": {
+                "type": "number"
+              },
+              "count": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "wacn",
+              "sysId",
+              "count"
+            ],
+            "additionalProperties": false
+          },
+          "description": "A conventional channel: the home systems its talkers' full IDs named (a Source ID Extension), and how often."
         }
       },
       "required": [

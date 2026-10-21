@@ -435,6 +435,8 @@ impl Stats {
             if let Some(m) = c.mode {
                 v["mode"] = json!(m.as_str());
                 v["names"] = json!(c.names);
+                v["data"] = json!(c.data.iter().map(|(what, count)| json!({ "what": what, "count": count })).collect::<Vec<_>>());
+                v["homeSystems"] = json!(c.home_systems.iter().map(|&(w, s, count)| json!({ "wacn": w, "sysId": s, "count": count })).collect::<Vec<_>>());
             }
             v
         };

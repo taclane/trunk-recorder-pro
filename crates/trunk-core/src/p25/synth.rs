@@ -12,7 +12,8 @@ use num_complex::Complex32;
 
 use super::crypt::{next_mi, Algorithm, Keystream, Phase};
 use super::fec::{golay24_encode, hamming1063_encode, rs_encode};
-use super::frame::{encode_nid, frame_dibits, HDU, LDU1, LDU2, SYNC_BITS, TDU};
+use super::frame::{blocks_dibits, encode_nid, frame_dibits, HDU, LDU1, LDU2, PDU, SYNC_BITS, TDU, TSDU};
+use super::tsbk::{trellis_encode, Tsbk};
 use super::phase2::{crc12, duid_codeword, xor_mask, Packet, BURST_2V, BURST_4V, BURST_DIBITS, BURST_FACCH_S, BURST_SACCH_S, SLOT_DIBITS};
 use super::voice::{bytes_to_hexbits, imbe_bits_to_params, imbe_header_encode, EncryptionSync};
 use crate::ambe::encode_vcw;
@@ -111,6 +112,53 @@ fn frame(nac: u16, duid: u8, fill: impl FnOnce(&mut [u8])) -> Vec<u8> {
     }
     fill(&mut raw);
     (0..n).map(|d| if is_status(d) { STATUS } else { raw[2 * d] << 1 | raw[2 * d + 1] }).collect()
+}
+
+/// `blocks` (12 octets each, CRC filled in here) after the NID, as a TSDU's
+/// or a PDU's (op25 layout; `n` dibits in all).
+fn block_frame(nac: u16, duid: u8, n: usize, blocks: &[Tsbk]) -> Vec<u8> {
+    let mut raw = vec![0u8; 2 * n];
+    raw[..48].copy_from_slice(&SYNC_BITS);
+    let mut body: Vec<u8> = Vec::new();
+    let nid = encode_nid(nac, duid);
+    body.extend((0..64).map(|i| (nid >> (63 - i) & 1) as u8));
+    for (k, b) in blocks.iter().enumerate() {
+        let mut b = *b;
+        // A TSBK, or a PDU's header: CRC-CCITT. (A PDU's data blocks share one CRC-32, left out.)
+        if duid == TSDU || k == 0 {
+            let crc = crate::bits::crc_ccitt_bytes(&b[..10]).to_be_bytes();
+            b[10..12].copy_from_slice(&crc);
+        }
+        body.extend(trellis_encode(&b));
+    }
+    let mut it = body.into_iter();
+    for d in 24..n {
+        if is_status(d) {
+            continue;
+        }
+        match (it.next(), it.next()) {
+            (Some(a), Some(b)) => (raw[2 * d], raw[2 * d + 1]) = (a, b),
+            _ => break,
+        }
+    }
+    (0..n).map(|d| if is_status(d) { STATUS } else { raw[2 * d] << 1 | raw[2 * d + 1] }).collect()
+}
+
+/// A TSDU of `tsbks` (up to 3; the last-block flag set on the last).
+pub fn tsdu(nac: u16, tsbks: &[Tsbk]) -> Vec<u8> {
+    let mut t = tsbks.to_vec();
+    if let Some(last) = t.last_mut() {
+        last[0] |= 0x80;
+    }
+    block_frame(nac, TSDU, frame_dibits(TSDU), &t)
+}
+
+/// A PDU: its header block, then `data` blocks (their CRC-32 not filled in).
+pub fn pdu(nac: u16, header: Tsbk, data: &[Tsbk]) -> Vec<u8> {
+    let mut blocks = vec![header];
+    blocks[0][6] = data.len() as u8 & 0x7f;
+    blocks.extend_from_slice(data);
+    block_frame(nac, PDU, blocks_dibits(blocks.len()), &blocks)
 }
 
 /// `n` bits of `v`, MSB first, at `raw[pos[0]], raw[pos[1]], …`.

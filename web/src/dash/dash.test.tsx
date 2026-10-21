@@ -111,7 +111,14 @@ test("Decode: a conventional system's page has its calls, and each channel's mod
   transport.onMessage({ type: "decodeDetail", system: "town", channels: [snap(155_200_000, "p25", ["Town PD"]), snap(155_400_000, "fm", ["Town PW"])], sites: [], patches: [] });
   const page = text(renderToString(<DecodePage />));
   assert.match(page, /7 calls saved this run · 1 active/);
+  assert.ok(page.includes("Also heard"), page);
   assert.ok(page.includes("P25 · Town PD") && page.includes("FM · Town PW"), page);
+  // What the channel carried besides voice, and its talkers' home systems.
+  transport.onMessage({
+    type: "decodeDetail", system: "town", sites: [], patches: [],
+    channels: [{ ...snap(155_200_000, "p25", ["Town PD"]), data: [{ what: "TSBK $27", count: 3 }, { what: "PDU SAP $20 format $16", count: 1 }], homeSystems: [{ wacn: 0xbee00, sysId: 0x3a9, count: 5 }] }],
+  });
+  assert.ok(text(renderToString(<DecodePage />)).includes("WACN BEE00 SysID 3A9 ×5 · TSBK $27 ×3 · PDU SAP $20 format $16"));
 });
 
 test("Radio: a system's page has its calls on the air now, saying the site and the others carrying it, and its log; not another's", () => {
